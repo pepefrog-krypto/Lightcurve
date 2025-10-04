@@ -1,0 +1,2 @@
+# Lightcurve
+Lightcurve for spaceapps
