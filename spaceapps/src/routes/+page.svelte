@@ -1,19 +1,17 @@
 <script>
   import Stars from "./Stars.svelte";
+  import { onMount, onDestroy } from "svelte";
 
+  // ---- UI state (translated) ----
   let selectedFile = null;
-  let fileName = "Ningún archivo seleccionado";
+  let fileName = "No file selected";
   let isAnalyzing = false;
   let isResult = false;
   let result = null;
 
   function handleFileChange(event) {
     selectedFile = event.target.files[0];
-    if (selectedFile) {
-      fileName = selectedFile.name;
-    } else {
-      fileName = "Ningún archivo seleccionado";
-    }
+    fileName = selectedFile ? selectedFile.name : "No file selected";
   }
 
   function analyzeFile() {
@@ -40,11 +38,40 @@
 
   function reset() {
     selectedFile = null;
-    fileName = "Ningún archivo seleccionado";
+    fileName = "No file selected";
     isAnalyzing = false;
     isResult = false;
     result = null;
   }
+
+  // ---- Raylib (WASM) embed ----
+  let canvasEl;
+  let rayInstance = null;
+  let rayReady = false;
+  let rayError = null;
+
+  onMount(async () => {
+  try {
+    // Intenta cargar Raylib solo si existe el archivo
+    const response = await fetch("./rayapp.js", { method: "HEAD" });
+    if (!response.ok) throw new Error("Raylib file not found");
+
+    const createRayApp = (await import("./rayapp.js")).default;
+    const Module = {
+      canvas: canvasEl,
+      locateFile: (p) => `/public/${p}`,
+      print: (txt) => console.log(txt),
+      printErr: (txt) => console.error(txt),
+    };
+
+    rayInstance = await createRayApp(Module);
+    rayReady = true;
+  } catch (e) {
+    rayError = "Raylib module not yet available.";
+    console.warn(rayError);
+  }
+});
+
 </script>
 
 <div class="container">
@@ -53,30 +80,58 @@
   <!-- Header -->
   <header class="header">
     <div class="logo">
-      <img src="./logo.png" alt="Lightcurve Logo" class="logo-img">
+      <img src="./logo.png" alt="Lightcurve Logo" class="logo-img" />
       <span class="logo-text">LIGHTCURVE</span>
     </div>
     <nav class="nav">
-      <a href="#home">Inicio</a>
-      <a href="#analyzer">Analizador IA</a>
-      <a href="#about">Sobre el Proyecto</a>
+      <a href="#home">Home</a>
+      <a href="#analyzer">AI Analyzer</a>
+      <a href="#about">About</a>
     </nav>
   </header>
 
   <!-- Hero -->
   <section id="home" class="hero">
-    <h1>Descubre Nuevos Mundos</h1>
+    <h1>Discover New Worlds</h1>
     <p>
-      Utilizando inteligencia artificial para analizar curvas de luz y encontrar exoplanetas en los confines del universo.
+      Using artificial intelligence to analyze light curves and find exoplanets at the edges of our universe.
     </p>
-    <a href="#analyzer" class="btn-primary">Prueba nuestro modelo</a>
+    <a href="#analyzer" class="btn-primary">Try our model</a>
+  </section>
+
+  <!-- Live Raylib (WASM) -->
+  <section class="raylib-section">
+    <div class="section-header">
+      <h2>Live Visualization (WebAssembly)</h2>
+      <p>Interactive rendering powered by Raylib + WebGL running right in your browser.</p>
+    </div>
+
+    <div class="glass-card">
+      <div class="raylib-wrap">
+        <canvas
+          bind:this={canvasEl}
+          id="raylib-canvas"
+          class="raylib-canvas"
+          width="800"
+          height="450"
+          aria-label="Raylib WebAssembly Canvas"
+        ></canvas>
+      </div>
+
+      {#if !rayReady && !rayError}
+        <p class="subtle">Loading Raylib module…</p>
+      {/if}
+      {#if rayError}
+        <p class="warning">Could not load the Raylib module: {rayError}</p>
+      {/if}
+    </div>
   </section>
 
   <!-- Analyzer -->
   <section id="analyzer" class="analyzer">
     <div class="section-header">
-      <h2>Analizador de datos</h2>
-      <p>Sube un archivo de datos (ej. CSV) para que nuestro modelo de IA lo analice.</p>
+      <h2>Data Analyzer</h2>
+      <p>Upload a data file (e.g., CSV) and let our AI model analyze it.</p>
     </div>
 
     {#if !isAnalyzing && !isResult}
@@ -86,7 +141,7 @@
           <p>{fileName}</p>
         </div>
         <button on:click={analyzeFile} class="btn-primary" disabled={!selectedFile}>
-          Analizar Datos
+          Analyze Data
         </button>
       </div>
     {/if}
@@ -94,30 +149,30 @@
     {#if isAnalyzing}
       <div class="glass-card center">
         <div class="loader"></div>
-        <p class="loading-text">Analizando con nuestro modelo IA...</p>
-        <small class="subtle">Esto puede tardar unos segundos.</small>
+        <p class="loading-text">Analyzing with our AI model…</p>
+        <small class="subtle">This may take a few seconds.</small>
       </div>
     {/if}
 
     {#if isResult}
       <div class="glass-card">
-        <h3>Resultados del Análisis</h3>
+        <h3>Analysis Results</h3>
         <div class="text-center">
           {#if result.found}
-            <h4 class="positive">¡Candidato a Exoplaneta Detectado!</h4>
-            <p class="subtle">Nuestro modelo identificó un patrón consistente.</p>
+            <h4 class="positive">Exoplanet Candidate Detected!</h4>
+            <p class="subtle">Our model identified a consistent transit-like pattern.</p>
             <div class="results">
-              <p><strong>Probabilidad:</strong> {result.probability}%</p>
-              <p><strong>Periodo Orbital:</strong> {result.period} días</p>
-              <p><strong>Radio Planetario:</strong> {result.radius}x</p>
+              <p><strong>Probability:</strong> {result.probability}%</p>
+              <p><strong>Orbital Period (days):</strong> {result.period}</p>
+              <p><strong>Planetary Radius (×R<sub>⊕</sub>):</strong> {result.radius}</p>
             </div>
           {:else}
-            <h4 class="warning">Sin Detección Clara</h4>
-            <p class="subtle">No se encontraron tránsitos significativos.</p>
+            <h4 class="warning">No Clear Detection</h4>
+            <p class="subtle">No significant transits were found.</p>
           {/if}
         </div>
         <button on:click={reset} class="btn-secondary">
-          Analizar otro archivo
+          Analyze another file
         </button>
       </div>
     {/if}
@@ -125,20 +180,23 @@
 
   <!-- About -->
   <section id="about" class="about">
-    <h2>Sobre Nuestro Proyecto</h2>
+    <h2>About Our Project</h2>
     <p>
-      <span class="highlight">Lightcurve</span> es nuestra solución para el <span class="highlight">NASA International Space Apps Challenge</span>. Nuestro reto es aplicar técnicas de Inteligencia Artificial y Machine Learning (AI/ML) para automatizar la detección de exoplanetas.
+      <span class="highlight">Lightcurve</span> is our solution for the
+      <span class="highlight">NASA International Space Apps Challenge</span>. Our mission is to apply AI/ML
+      techniques to automate exoplanet detection from stellar light curves.
     </p>
     <p>
-      Nuestro modelo de inteligencia artificial fue entrenado con conjuntos de datos abiertos provenientes de misiones de la NASA, como Kepler y TESS, para aprender a reconocer patrones característicos en las curvas de luz de las estrellas.
-
-        Utilizando nuestra propia herramienta de visualización científica, desarrollada con Reilid y C, transformamos los datos astronómicos en representaciones interactivas y precisas. Esto permite detectar, analizar y verificar nuevos candidatos a exoplanetas con una mayor claridad y comprensión visual que los métodos convencionales.
+      Our artificial intelligence model was trained on open datasets from NASA missions such as Kepler and TESS
+      to learn characteristic patterns in stellar photometry. Using our own scientific visualization pipeline,
+      developed with Raylib and C, we turn astronomy data into interactive, high-fidelity views. This helps us detect,
+      analyze, and verify new exoplanet candidates with greater clarity and visual understanding than conventional methods.
     </p>
-    <p class="team">Equipo: Lightcurve SpaceApps Team</p>
+    <p class="team">Team: Lightcurve SpaceApps Team</p>
   </section>
 
   <footer class="footer">
-    <p>&copy; 2025 Lightcurve Team. Creado para el NASA Space Apps Challenge.</p>
+    <p>&copy; 2025 Lightcurve Team. Built for the NASA Space Apps Challenge.</p>
   </footer>
 </div>
 
@@ -182,8 +240,6 @@
     gap: 2rem;
   }
   .nav a {
-        font-family: 'Abel', sans-serif;
-
     color: #bbb;
     font-weight: 500;
     text-decoration: none;
@@ -195,24 +251,38 @@
   .hero {
     text-align: center;
     padding: 6rem 1rem;
-        font-family: 'Abel', sans-serif;
-
   }
   .hero h1 {
     font-size: 3.5rem;
     font-weight: 700;
     margin-bottom: 1rem;
     color: #f4f0f0;
-        font-family: 'Abel', sans-serif;
-
   }
   .hero p {
     font-size: 1.2rem;
     color: #aaa;
     max-width: 700px;
     margin: 0 auto 2rem;
-        font-family: 'Abel', sans-serif;
+  }
 
+  /* Raylib section */
+  .raylib-section {
+    padding: 6rem 1rem;
+    text-align: center;
+  }
+  .raylib-wrap {
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  .raylib-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    aspect-ratio: 16/9; /* mantiene proporción visual */
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #000;
   }
 
   /* Buttons */
@@ -224,10 +294,7 @@
     cursor: pointer;
     transition: background 0.3s;
   }
-  .btn-primary {
-    background: #fff;
-    color: #000;
-  }
+  .btn-primary { background: #fff; color: #000; }
   .btn-primary:hover { background: #ddd; }
   .btn-secondary {
     display: block;
@@ -242,23 +309,17 @@
   .analyzer, .about {
     padding: 6rem 1rem;
     text-align: center;
-        font-family: 'Abel', sans-serif;
-
   }
   .section-header h2, .about h2 {
     font-size: 2.5rem;
     margin-bottom: 1rem;
     color:#f4f0f0 ;
-        font-family: 'Abel', sans-serif;
-
   }
   .section-header p, .about p {
     color: #aaa;
     max-width: 700px;
     margin: 0 auto 1.5rem;
     font-size: 1.1rem;
-        font-family: 'Abel', sans-serif;
-
   }
   .highlight { color: #fff; font-weight: bold; }
   .team { margin-top: 2rem; font-weight: bold; }
@@ -273,8 +334,6 @@
     max-width: 650px;
     margin: 0 auto;
     color: white;
-        font-family: 'Abel', sans-serif;
-
   }
   .file-box {
     border: 2px dashed #666;
@@ -284,8 +343,6 @@
     text-align: center;
     font-size: 0.95rem;
     color: #bbb;
-        font-family: 'Abel', sans-serif;
-
   }
 
   /* Loader */
@@ -308,8 +365,6 @@
     border-radius: 0.75rem;
     text-align: left;
     color: #f4f0f0;
-        font-family: 'Abel', sans-serif;
-
   }
 
   .subtle { color: #aaa; font-size: 0.95rem; }
@@ -322,7 +377,5 @@
     font-size: 0.9rem;
     color: #666;
     margin-top: 3rem;
-        font-family: 'Abel', sans-serif;
-
   }
 </style>
